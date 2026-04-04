@@ -2,7 +2,6 @@ const { DispositifIoT } = require('../models');
 const { crudController } = require('./crudFactory');
 
 const base = crudController(DispositifIoT, [
-  'idSerie',
   'typeCapteur',
   'niveauMesure',
   'batterie',
@@ -15,7 +14,7 @@ module.exports = {
   create: async (req, res) => {
     try {
       const data = {
-        idSerie: req.body.idSerie,
+        idSerie: null,
         typeCapteur: req.body.typeCapteur,
         niveauMesure: req.body.niveauMesure,
         batterie: req.body.batterie,
@@ -23,14 +22,9 @@ module.exports = {
         idBac: req.body.idBac,
       };
 
-      // Si idSerie n'est pas fourni, on le génère automatiquement depuis l'id créé.
-      if (!data.idSerie) data.idSerie = null;
-
       const item = await DispositifIoT.create(data);
-      if (!item.idSerie) {
-        const auto = `ESP-${String(item.id).padStart(3, '0')}`;
-        await item.update({ idSerie: auto });
-      }
+      const auto = `IOT-${String(item.id).padStart(5, '0')}`;
+      await item.update({ idSerie: auto });
 
       return res.status(201).json(item);
     } catch (error) {

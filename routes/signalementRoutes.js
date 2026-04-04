@@ -11,9 +11,8 @@ const {
 
 router.get('/', authRequired, ctrl.list);
 router.get('/:id', authRequired, idParamValidator, validateRequest, ctrl.getById);
-// seul citoyen peut créer un signalement
+// Parcours citoyen ; l'admin est toujours autorisé (voir middleware roleAllowed)
 router.post('/', authRequired, roleAllowed(['citoyen']), signalementCreateValidator, validateRequest, ctrl.create);
-// seul citoyen peut modifier/supprimer ses signalements
 router.put('/:id', authRequired, roleAllowed(['citoyen']), signalementUpdateValidator, validateRequest, ctrl.update);
 router.delete('/:id', authRequired, roleAllowed(['citoyen']), idParamValidator, validateRequest, ctrl.remove);
 

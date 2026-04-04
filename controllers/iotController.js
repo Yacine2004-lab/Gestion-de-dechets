@@ -45,7 +45,7 @@ exports.update = async (req, res) => {
         message: 'Dispositif introuvable : aucun enregistrement avec cet idSerie dans dispositifs_iot',
         idSerieDemande: idSerieNorm,
         hint:
-          'Même base que DB_NAME dans .env. Vérifiez tiret vs underscore (ESP-006 vs ESP_006 sont acceptés de la même façon après redémarrage). En admin : GET /api/dispositifs-iot. Sinon créez un bac puis POST /api/dispositifs-iot avec idSerie + idBac.',
+          'Même base que DB_NAME dans .env. Vérifiez tiret vs underscore (IOT-00001 vs IOT_00001 sont acceptés de la même façon). En admin : GET /api/dispositifs-iot pour voir les idSerie auto (création : POST avec idBac + typeCapteur uniquement).',
         ...(idSeriesEnBase.length ? { idSeriesEnBase } : {}),
       });
     }

@@ -1,11 +1,14 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
-const TYPE_CAPTEURS = ['ultrason', 'ESP32', 'autres'];
+
+/** Types de capteur IoT (enum SQL + validation API). */
+const TYPE_CAPTEURS = ['ultrason', 'ESP-32'];
 
 const DispositifIoT = sequelize.define(
   'DispositifIoT',
   {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    /** Numéro de série auto-attribué à la création (IOT-00001, …), non modifiable via API. */
     idSerie: { type: DataTypes.STRING, allowNull: true, unique: true },
     typeCapteur: { type: DataTypes.ENUM(...TYPE_CAPTEURS), allowNull: false },
     niveauMesure: { type: DataTypes.STRING, allowNull: true },
@@ -16,5 +19,6 @@ const DispositifIoT = sequelize.define(
   { tableName: 'dispositifs_iot', timestamps: true }
 );
 
+DispositifIoT.TYPE_CAPTEURS = TYPE_CAPTEURS;
 module.exports = DispositifIoT;
 

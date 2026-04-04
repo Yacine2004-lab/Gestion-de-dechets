@@ -79,5 +79,5 @@ function crudController(Model, allowedFields = []) {
   };
 }
 
-module.exports = { crudController };
+module.exports = { crudController, sendWriteError };
 

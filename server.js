@@ -1,5 +1,6 @@
 // backend/server.js - Point d'entrée API
 const express = require('express');
+const cors = require('cors');
 const bcrypt = require('bcrypt');
 const { connectDB, sequelize } = require('./config/db');
 const { Utilisateur, Authentification, Role } = require('./models'); // modèles + associations
@@ -17,10 +18,10 @@ const zoneRisqueRoutes = require('./routes/zoneRisqueRoutes');
 const localisationRoutes = require('./routes/localisationRoutes');
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10);
-
-connectDB();
+const PORT = process.env.PORT || 5002;
 
 app.get('/', (req, res) => {
   res.json({
@@ -41,12 +42,13 @@ app.get('/', (req, res) => {
       'POST /api/iot/update':
         'Simulation ESP32 → met à jour DispositifIoT, Bac, Remplissage et déclenche/résout les alertes bac_plein (pas de POST /api/alertes)',
       'GET /api/alertes': 'Liste des alertes (créées automatiquement par IoT)',
-      'POST /api/collectes': 'Créer une collecte (collecteur ou admin)',
-      'POST /api/signalements': 'Créer un signalement (citoyen seulement)',
+      'POST /api/collectes': 'Créer une collecte (collecteur ; admin autorisé comme collecteur)',
+      'POST /api/signalements': 'Créer un signalement (citoyen ; admin autorisé comme citoyen)',
       'GET /api/camions': 'Lister les camions',
       'GET /api/reclamations': 'Lister les reclamations',
       'GET /api/zones-risque': 'Lister les zones à risque',
       'GET /api/localisations': 'Lister les localisations',
+      'POST /api/localisations': 'Créer une localisation (admin) : adresse + quartier (texte libre)',
     },
     relations: {
       'Utilisateur 1-n Collecte': 'collectes.idUtilisateur -> utilisateurs.id',
@@ -56,9 +58,10 @@ app.get('/', (req, res) => {
       'Bac 1-n Signalement': 'signalements.idBac -> bacs.id',
       'Alerte 1-n Signalement': 'signalements.idAlerte -> alertes.id',
       'Utilisateur 1-n Reclamation': 'reclamations.idUtilisateur -> utilisateurs.id',
+      'Localisation -> Quartier': 'localisations.quartier (texte)',
       'Localisation -> Departement': 'localisations.departement (champ texte)',
       'Localisation -> Itineraire': 'localisations.itineraire (champ texte)',
-      'ZoneRisque 1-n Localisation': 'localisations.idZoneRisque -> zones_risque.id',
+      'ZoneRisque 1-n Localisation': 'localisations.id_zone_risque -> zones_risque.id (API JSON: idZoneRisque)',
     },
   });
 });
@@ -71,6 +74,8 @@ app.get('/test', (req, res) => {
 <head><meta charset="utf-8"><title>Test inscription</title></head>
 <body style="font-family:sans-serif; max-width:400px; margin:2rem auto; padding:1rem;">
   <h1>Test inscription</h1>
+  <p style="font-size:0.9rem;color:#444;">L’inscription API exige un <strong>token admin</strong> (connectez-vous via <code>POST /api/auth/login</code>).</p>
+  <label>Token admin (Bearer) <input name="adminToken" id="adminToken" type="password" placeholder="coller le JWT" style="width:100%"></label>
   <form id="form" style="display:flex;flex-direction:column;gap:0.5rem;">
     <label>Nom <input name="nom" required></label>
     <label>Email <input name="email" type="email" required></label>
@@ -92,9 +97,13 @@ app.get('/test', (req, res) => {
       const body = Object.fromEntries(fd);
       const pre = document.getElementById('result');
       try {
+        const token = (document.getElementById('adminToken') || {}).value || '';
         const r = await fetch('/api/users/register', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: 'Bearer ' + token.trim() } : {}),
+          },
           body: JSON.stringify(body)
         });
         const data = await r.json();
@@ -213,15 +222,19 @@ async function bootstrapAdmin() {
   else console.log(`✅ Compte admin mis à jour: ${adminEmail}`);
 }
 
-sequelize
-  .sync({ alter: true })
-  .then(async () => {
+async function start() {
+  try {
+    await connectDB();
+    await sequelize.sync({ alter: true });
     console.log('Tables synchronisées avec Postgres');
     await bootstrapAdmin();
-  })
-  .catch((err) => console.error('Erreur lors de la synchronisation des tables :', err));
+    app.listen(PORT, () => {
+      console.log(`🚀 Serveur lancé sur http://localhost:${PORT}`);
+    });
+  } catch (err) {
+    console.error('Démarrage impossible :', err?.message || err);
+    process.exit(1);
+  }
+}
 
-const PORT = process.env.PORT || 5002;
-app.listen(PORT, () => {
-  console.log(`🚀 Serveur lancé sur http://localhost:${PORT}`);
-});
+start();
