@@ -12,6 +12,10 @@ const Remplissage = require('./Remplissage');
 const Collecte = require('./Collecte');
 const Alerte = require('./Alerte');
 const Signalement = require('./Signalement');
+const ZoneRisque = require('./ZoneRisque');
+const Localisation = require('./Localisation');
+const Camion = require('./Camion');
+const Reclamation = require('./Reclamation');
 
 // Utilisateur <-> Authentification (1-1)
 Utilisateur.hasOne(Authentification, { foreignKey: 'idUtilisateur' });
@@ -73,6 +77,14 @@ Alerte.belongsTo(Bac, { foreignKey: 'idBac' });
 Alerte.hasMany(Signalement, { foreignKey: 'idAlerte' });
 Signalement.belongsTo(Alerte, { foreignKey: 'idAlerte' });
 
+// Utilisateur -> Reclamation (1-n)
+Utilisateur.hasMany(Reclamation, { foreignKey: 'idUtilisateur' });
+Reclamation.belongsTo(Utilisateur, { foreignKey: 'idUtilisateur' });
+
+// ZoneRisque -> Localisation (1-n)
+ZoneRisque.hasMany(Localisation, { foreignKey: 'idZoneRisque' });
+Localisation.belongsTo(ZoneRisque, { foreignKey: 'idZoneRisque' });
+
 module.exports = {
   sequelize,
   Utilisateur,
@@ -86,4 +98,8 @@ module.exports = {
   Collecte,
   Alerte,
   Signalement,
+  ZoneRisque,
+  Localisation,
+  Camion,
+  Reclamation,
 };

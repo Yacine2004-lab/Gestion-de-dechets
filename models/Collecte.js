@@ -8,7 +8,6 @@ const Collecte = sequelize.define(
     idUtilisateur: { type: DataTypes.INTEGER, allowNull: false },
     idBac: { type: DataTypes.INTEGER, allowNull: false },
     date: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
-    quantiteCollecte: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
   },
   { tableName: 'collectes', timestamps: true }
 );

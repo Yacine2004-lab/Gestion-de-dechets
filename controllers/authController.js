@@ -61,6 +61,10 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: 'Identifiants incorrects' });
     }
 
+    if (!auth.Utilisateur) {
+      return res.status(500).json({ message: 'Compte incomplet : utilisateur lié introuvable' });
+    }
+
     const user = auth.Utilisateur.get({ plain: true });
     const secret = process.env.JWT_SECRET;
     if (!secret) {
@@ -174,6 +178,9 @@ exports.logout = async (req, res) => {
 
     res.status(200).json({ message: 'Déconnexion réussie' });
   } catch (error) {
+    if (error?.name === 'JsonWebTokenError' || error?.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token invalide ou expiré' });
+    }
     res.status(500).json({ message: 'Erreur lors de la déconnexion', error });
   }
 };

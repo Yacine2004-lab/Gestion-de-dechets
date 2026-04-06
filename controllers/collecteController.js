@@ -1,9 +1,18 @@
 const { Collecte, Bac, Utilisateur } = require('../models');
 
+function withBacTaux(item, bac) {
+  const plain = item.get ? item.get({ plain: true }) : item;
+  delete plain.quantiteCollecte;
+  return {
+    ...plain,
+    tauxRemplissageBac: bac ? bac.tauxRemplissage : null,
+  };
+}
+
 exports.list = async (req, res) => {
   try {
-    const items = await Collecte.findAll();
-    return res.status(200).json(items);
+    const items = await Collecte.findAll({ include: [{ model: Bac, attributes: ['id', 'tauxRemplissage'] }] });
+    return res.status(200).json(items.map((it) => withBacTaux(it, it.Bac)));
   } catch (error) {
     return res.status(500).json({ message: 'Erreur lors de la récupération', error });
   }
@@ -11,11 +20,13 @@ exports.list = async (req, res) => {
 
 exports.getById = async (req, res) => {
   try {
-    const item = await Collecte.findByPk(req.params.id);
+    const item = await Collecte.findByPk(req.params.id, {
+      include: [{ model: Bac, attributes: ['id', 'tauxRemplissage'] }],
+    });
     if (!item) return res.status(404).json({ message: 'Introuvable' });
-    res.status(200).json(item);
+    return res.status(200).json(withBacTaux(item, item.Bac));
   } catch (error) {
-    res.status(500).json({ message: 'Erreur', error });
+    return res.status(500).json({ message: 'Erreur', error });
   }
 };
 
@@ -30,7 +41,6 @@ exports.create = async (req, res) => {
     const roleDb = String(actor.role || '').toLowerCase();
 
     const idBac = Number(req.body.idBac);
-    const quantiteCollecte = Number(req.body.quantiteCollecte ?? 0);
     const date = req.body.date;
 
     if (!idBac) return res.status(400).json({ message: 'idBac est obligatoire' });
@@ -58,12 +68,11 @@ exports.create = async (req, res) => {
       idUtilisateur,
       idBac,
       date: date || new Date(),
-      quantiteCollecte,
     });
 
-    res.status(201).json(item);
+    return res.status(201).json(withBacTaux(item, bac));
   } catch (error) {
-    res.status(500).json({ message: 'Erreur lors de la création', error });
+    return res.status(500).json({ message: 'Erreur lors de la création', error });
   }
 };
 
@@ -83,13 +92,13 @@ exports.update = async (req, res) => {
 
     const patch = {};
     if (req.body.idBac !== undefined) patch.idBac = Number(req.body.idBac);
-    if (req.body.quantiteCollecte !== undefined) patch.quantiteCollecte = Number(req.body.quantiteCollecte);
     if (req.body.date !== undefined) patch.date = req.body.date;
 
     await item.update(patch);
-    res.status(200).json(item);
+    const bac = await Bac.findByPk(item.idBac, { attributes: ['id', 'tauxRemplissage'] });
+    return res.status(200).json(withBacTaux(item, bac));
   } catch (error) {
-    res.status(500).json({ message: 'Erreur lors de la modification', error });
+    return res.status(500).json({ message: 'Erreur lors de la modification', error });
   }
 };
 

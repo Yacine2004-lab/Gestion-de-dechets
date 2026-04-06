@@ -74,11 +74,15 @@ exports.createUser = async (req, res) => {
         .json({ message: 'Un utilisateur avec cet email existe déjà' });
     }
 
+    const roleNom = String(role || 'citoyen').toLowerCase();
+    const roleRow = await Role.findOne({ where: { nom: roleNom } });
+
     const user = await Utilisateur.create({
       nom,
       prenom: prenom || null,
       email,
-      role: role || 'citoyen',
+      role: roleNom,
+      idRole: roleRow ? roleRow.id : null,
       telephone: telephone || null,
       localisation: localisation || null,
       etat: true,
@@ -105,15 +109,21 @@ exports.updateUser = async (req, res) => {
     if (!user) return res.status(404).json({ message: 'Utilisateur non trouvé' });
 
     const { nom, prenom, email, telephone, role, idRole, localisation, etat } = req.body;
-    await user.update({
+    const updates = {
       ...(nom !== undefined && { nom }),
       ...(prenom !== undefined && { prenom }),
       ...(email !== undefined && { email }),
       ...(telephone !== undefined && { telephone }),
-      ...(role !== undefined && { role }),
+      ...(role !== undefined && { role: String(role).toLowerCase() }),
+      ...(idRole !== undefined && { idRole }),
       ...(localisation !== undefined && { localisation }),
       ...(etat !== undefined && { etat }),
-    });
+    };
+    if (role !== undefined && idRole === undefined) {
+      const roleRow = await Role.findOne({ where: { nom: updates.role } });
+      if (roleRow) updates.idRole = roleRow.id;
+    }
+    await user.update(updates);
 
     res.status(200).json(user.get({ plain: true }));
   } catch (error) {

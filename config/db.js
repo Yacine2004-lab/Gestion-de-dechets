@@ -40,13 +40,9 @@ const sequelize = new Sequelize(dbName, process.env.DB_USER, process.env.DB_PASS
 });
 
 const connectDB = async () => {
-  try {
-    await ensureDatabaseExists();
-    await sequelize.authenticate();
-    console.log('✅ Connexion à PostgreSQL réussie !');
-  } catch (error) {
-    console.error('❌ Impossible de se connecter à la base de données:', error.message || error);
-  }
+  await ensureDatabaseExists();
+  await sequelize.authenticate();
+  console.log('✅ Connexion à PostgreSQL réussie !');
 };
 
 module.exports = { sequelize, connectDB };

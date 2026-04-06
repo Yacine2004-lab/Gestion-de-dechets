@@ -47,7 +47,8 @@ async function adminOnly(req, res, next) {
 }
 
 function roleAllowed(roles) {
-  const allow = (roles || []).map((r) => String(r).toLowerCase());
+  // L'admin peut utiliser les mêmes parcours que collecteur / citoyen (tableaux de bord).
+  const allow = [...new Set([...(roles || []).map((r) => String(r).toLowerCase()), 'admin'])];
   return async function roleAllowedMiddleware(req, res, next) {
     try {
       const id = req.auth?.idUtilisateur;

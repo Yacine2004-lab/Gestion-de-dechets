@@ -1,4 +1,9 @@
-const { Signalement } = require('../models');
+const { Signalement, Utilisateur } = require('../models');
+
+async function actorIsAdmin(idUtilisateur) {
+  const u = await Utilisateur.findByPk(idUtilisateur, { attributes: ['role'] });
+  return String(u?.role || '').toLowerCase() === 'admin';
+}
 
 function pickDefined(obj, keys) {
   const out = {};
@@ -26,7 +31,7 @@ module.exports = {
     }
   },
 
-  // Citoyen : crée un signalement en son nom (idUtilisateur = token)
+  // Citoyen ou admin : crée un signalement au nom du compte connecté (idUtilisateur = token)
   create: async (req, res) => {
     try {
       const idUtilisateur = Number(req.auth?.idUtilisateur);
@@ -58,7 +63,7 @@ module.exports = {
     }
   },
 
-  // Citoyen : modifie uniquement ses propres signalements
+  // Citoyen : ses signalements uniquement ; admin : tous
   update: async (req, res) => {
     try {
       const idUtilisateur = Number(req.auth?.idUtilisateur);
@@ -67,7 +72,8 @@ module.exports = {
       const item = await Signalement.findByPk(req.params.id);
       if (!item) return res.status(404).json({ message: 'Introuvable' });
 
-      if (Number(item.idUtilisateur) !== idUtilisateur) {
+      const isAdmin = await actorIsAdmin(idUtilisateur);
+      if (!isAdmin && Number(item.idUtilisateur) !== idUtilisateur) {
         return res.status(403).json({ message: 'Accès refusé' });
       }
 
@@ -84,7 +90,7 @@ module.exports = {
     }
   },
 
-  // Citoyen : supprime uniquement ses propres signalements
+  // Citoyen : ses signalements uniquement ; admin : tous
   remove: async (req, res) => {
     try {
       const idUtilisateur = Number(req.auth?.idUtilisateur);
@@ -93,7 +99,8 @@ module.exports = {
       const item = await Signalement.findByPk(req.params.id);
       if (!item) return res.status(404).json({ message: 'Introuvable' });
 
-      if (Number(item.idUtilisateur) !== idUtilisateur) {
+      const isAdmin = await actorIsAdmin(idUtilisateur);
+      if (!isAdmin && Number(item.idUtilisateur) !== idUtilisateur) {
         return res.status(403).json({ message: 'Accès refusé' });
       }
 

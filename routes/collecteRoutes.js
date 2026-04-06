@@ -5,11 +5,11 @@ const { authRequired, roleAllowed } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validateRequest');
 const { idParamValidator, collecteCreateValidator, collecteUpdateValidator } = require('../middleware/validators');
 
-// Admin + collecteur : création / modification ; suppression réservée à l'admin (ci-dessous)
+// Collecteur ; l'admin est toujours autorisé sur création / modification (middleware roleAllowed)
 router.get('/', authRequired, ctrl.list);
 router.get('/:id', authRequired, idParamValidator, validateRequest, ctrl.getById);
-router.post('/', authRequired, roleAllowed(['collecteur', 'admin']), collecteCreateValidator, validateRequest, ctrl.create);
-router.put('/:id', authRequired, roleAllowed(['collecteur', 'admin']), collecteUpdateValidator, validateRequest, ctrl.update);
+router.post('/', authRequired, roleAllowed(['collecteur']), collecteCreateValidator, validateRequest, ctrl.create);
+router.put('/:id', authRequired, roleAllowed(['collecteur']), collecteUpdateValidator, validateRequest, ctrl.update);
 router.delete('/:id', authRequired, roleAllowed(['admin']), idParamValidator, validateRequest, ctrl.remove);
 
 module.exports = router;

@@ -1,6 +1,8 @@
 const { body, param, query } = require('express-validator');
 
 const ROLES = ['admin', 'collecteur', 'citoyen'];
+const DispositifIoTModel = require('../models/DispositifIoT');
+const TYPE_CAPTEURS = DispositifIoTModel.TYPE_CAPTEURS;
 
 const idParamValidator = [param('id').isInt({ min: 1 }).withMessage('id doit être un entier > 0')];
 
@@ -36,7 +38,10 @@ const updateUserValidator = [
     .optional()
     .isIn(ROLES)
     .withMessage('role invalide (admin, collecteur, citoyen)'),
+  body('idRole').optional({ nullable: true }).isInt({ min: 1 }).withMessage('idRole doit être un entier > 0'),
   body('etat').optional().isBoolean().withMessage('etat doit être booléen'),
+  body('telephone').optional({ nullable: true }).isString().withMessage('telephone invalide'),
+  body('localisation').optional({ nullable: true }).isString().withMessage('localisation invalide'),
 ];
 
 const bacCreateValidator = [
@@ -55,16 +60,19 @@ const bacUpdateValidator = [
 ];
 
 const dispositifCreateValidator = [
-  body('idSerie').isString().trim().notEmpty().withMessage('idSerie obligatoire'),
-  body('typeCapteur').isString().trim().notEmpty().withMessage('typeCapteur obligatoire'),
+  body('typeCapteur')
+    .isIn(TYPE_CAPTEURS)
+    .withMessage('typeCapteur invalide (ultrason, ESP-32)'),
   body('idBac').isInt({ min: 1 }).withMessage('idBac doit être un entier > 0'),
   body('batterie').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('batterie 0-100'),
 ];
 
 const dispositifUpdateValidator = [
   ...idParamValidator,
-  body('idSerie').optional().isString().trim().notEmpty().withMessage('idSerie invalide'),
-  body('typeCapteur').optional().isString().trim().notEmpty().withMessage('typeCapteur invalide'),
+  body('typeCapteur')
+    .optional()
+    .isIn(TYPE_CAPTEURS)
+    .withMessage('typeCapteur invalide (ultrason, ESP-32)'),
   body('idBac').optional().isInt({ min: 1 }).withMessage('idBac doit être un entier > 0'),
   body('batterie').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('batterie 0-100'),
 ];
@@ -95,14 +103,12 @@ const iotUpdateValidator = [
 const collecteCreateValidator = [
   body('idBac').isInt({ min: 1 }).withMessage('idBac doit être un entier > 0'),
   body('idUtilisateur').optional().isInt({ min: 1 }).withMessage('idUtilisateur doit être un entier > 0'),
-  body('quantiteCollecte').optional().isFloat({ min: 0 }).withMessage('quantiteCollecte doit être >= 0'),
   body('date').optional().isISO8601().withMessage('date invalide (ISO8601)'),
 ];
 
 const collecteUpdateValidator = [
   ...idParamValidator,
   body('idBac').optional().isInt({ min: 1 }).withMessage('idBac doit être un entier > 0'),
-  body('quantiteCollecte').optional().isFloat({ min: 0 }).withMessage('quantiteCollecte doit être >= 0'),
   body('date').optional().isISO8601().withMessage('date invalide (ISO8601)'),
 ];
 
@@ -134,6 +140,93 @@ const signalementUpdateValidator = [
   body('date').optional().isISO8601().withMessage('date invalide (ISO8601)'),
 ];
 
+const zoneRisqueCreateValidator = [
+  body('niveauRisque').optional().isString().trim().notEmpty().withMessage('niveauRisque invalide'),
+  body('cause').optional({ nullable: true }).isString().withMessage('cause invalide'),
+];
+
+/** Texte libre : évite isString() + trim() qui doublonnent les erreurs (ex. "" → Invalid value + obligatoire). */
+function localisationQuartierCreate(value, { req }) {
+  if (value === undefined || value === null) {
+    throw new Error('quartier obligatoire');
+  }
+  const t = String(value).trim();
+  if (!t) {
+    throw new Error('quartier ne peut pas être vide');
+  }
+  req.body.quartier = t;
+  return true;
+}
+
+function localisationQuartierUpdate(value, { req }) {
+  if (value === undefined || value === null || value === '') {
+    return true;
+  }
+  const t = String(value).trim();
+  if (!t) {
+    throw new Error('quartier ne peut pas être une chaîne vide');
+  }
+  req.body.quartier = t;
+  return true;
+}
+
+const localisationCreateValidator = [
+  body('adresse').isString().trim().notEmpty().withMessage('adresse obligatoire'),
+  body('quartier').custom(localisationQuartierCreate),
+  body('latitude').optional({ nullable: true }).isFloat().withMessage('latitude invalide'),
+  body('longitude').optional({ nullable: true }).isFloat().withMessage('longitude invalide'),
+  body('departement').optional({ nullable: true }).isString().withMessage('departement invalide'),
+  body('itineraire').optional({ nullable: true }).isString().withMessage('itineraire invalide'),
+  body('itinéraire').optional({ nullable: true }).isString().withMessage('itinéraire invalide'),
+  body('idZoneRisque')
+    .optional({ nullable: true })
+    .isInt({ min: 1 })
+    .withMessage('idZoneRisque doit être un entier > 0'),
+  body('id_zone_risque')
+    .optional({ nullable: true })
+    .isInt({ min: 1 })
+    .withMessage('id_zone_risque doit être un entier > 0'),
+];
+
+const localisationUpdateValidator = [
+  ...idParamValidator,
+  body('adresse').optional().isString().trim().notEmpty().withMessage('adresse invalide'),
+  body('quartier').optional({ values: 'falsy' }).custom(localisationQuartierUpdate),
+  body('latitude').optional({ nullable: true }).isFloat().withMessage('latitude invalide'),
+  body('longitude').optional({ nullable: true }).isFloat().withMessage('longitude invalide'),
+  body('departement').optional({ nullable: true }).isString().withMessage('departement invalide'),
+  body('itineraire').optional({ nullable: true }).isString().withMessage('itineraire invalide'),
+  body('itinéraire').optional({ nullable: true }).isString().withMessage('itinéraire invalide'),
+  body('idZoneRisque')
+    .optional({ nullable: true })
+    .isInt({ min: 1 })
+    .withMessage('idZoneRisque doit être un entier > 0'),
+  body('id_zone_risque')
+    .optional({ nullable: true })
+    .isInt({ min: 1 })
+    .withMessage('id_zone_risque doit être un entier > 0'),
+];
+
+const camionCreateValidator = [
+  body('immatriculation').isString().trim().notEmpty().withMessage('immatriculation obligatoire'),
+  body('etat').optional().isString().trim().notEmpty().withMessage('etat invalide'),
+  body('capacite').optional().isFloat({ min: 0 }).withMessage('capacite doit être >= 0'),
+  body('idItineraire')
+    .optional({ nullable: true })
+    .isInt({ min: 1 })
+    .withMessage('idItineraire doit être un entier > 0'),
+];
+
+const camionUpdateValidator = [...idParamValidator, ...camionCreateValidator];
+
+const reclamationCreateValidator = [
+  body('description').isString().trim().notEmpty().withMessage('description obligatoire'),
+  body('statut').optional().isString().trim().notEmpty().withMessage('statut invalide'),
+  body('date').optional().isISO8601().withMessage('date invalide (ISO8601)'),
+];
+
+const reclamationUpdateValidator = [...idParamValidator, ...reclamationCreateValidator];
+
 module.exports = {
   idParamValidator,
   idsQueryValidator,
@@ -151,4 +244,11 @@ module.exports = {
   alerteUpdateValidator,
   signalementCreateValidator,
   signalementUpdateValidator,
+  zoneRisqueCreateValidator,
+  localisationCreateValidator,
+  localisationUpdateValidator,
+  camionCreateValidator,
+  camionUpdateValidator,
+  reclamationCreateValidator,
+  reclamationUpdateValidator,
 };
