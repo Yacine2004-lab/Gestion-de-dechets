@@ -10,11 +10,23 @@ const {
   updateUserValidator,
 } = require('../middleware/validators');
 
-router.get('/', userCtrl.getAllUsers);
-router.get('/plusieurs', idsQueryValidator, validateRequest, userCtrl.getUsers);   // ?ids=1,2,3
-router.get('/:id', idParamValidator, validateRequest, userCtrl.getUserById);
+// --- ROUTES RÉSERVÉES À L'ADMIN ---
+
+// Seul l'admin peut lister tous les utilisateurs ou plusieurs à la fois
+router.get('/', authRequired, adminOnly, userCtrl.getAllUsers);
+router.get('/plusieurs', authRequired, adminOnly, idsQueryValidator, validateRequest, userCtrl.getUsers); // ?ids=1,2,3
+
+// Inscription et suppression (déjà bien protégées dans ton code)
 router.post('/register', authRequired, adminOnly, registerValidator, validateRequest, userCtrl.createUser);
-router.put('/:id', authRequired, updateUserValidator, validateRequest, userCtrl.updateUser);
 router.delete('/:id', authRequired, adminOnly, idParamValidator, validateRequest, userCtrl.deleteUser);
+
+
+// --- ROUTES ACCESSIBLES PAR TOUS (Connectés) ---
+
+// Un agent ou citoyen peut voir les détails d'un profil (le sien ou un collègue selon ton controller)
+router.get('/:id', authRequired, idParamValidator, validateRequest, userCtrl.getUserById);
+
+// Un utilisateur peut modifier ses infos (le middleware authRequired est crucial ici)
+router.put('/:id', authRequired, updateUserValidator, validateRequest, userCtrl.updateUser);
 
 module.exports = router;

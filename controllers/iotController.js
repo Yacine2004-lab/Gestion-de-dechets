@@ -1,156 +1,145 @@
 const { Sequelize } = require('sequelize');
 const { DispositifIoT, Bac, Remplissage, Alerte } = require('../models');
 
-/** Clé de comparaison : casse ignorée, underscore et tiret équivalents (ESP_006 ≈ ESP-006). */
+/** * Clé de comparaison : casse ignorée, underscore et tiret équivalents 
+ */
 function idSerieCompareKey(s) {
   return String(s).trim().toLowerCase().replace(/_/g, '-');
 }
 
-// POST /api/iot/update
-// Body: { id_serie, distance_cm, batterie }
+// --- 1. RÉCUPÉRER TOUT (GET /api/remplissages) ---
+exports.getAll = async (req, res) => {
+  try {
+    const remplissages = await Remplissage.findAll({
+      order: [['createdAt', 'DESC']], 
+      include: [
+        { model: Bac, attributes: ['id', 'tauxRemplissage'] },
+        { model: DispositifIoT, attributes: ['idSerie', 'typeCapteur'] }
+      ]
+    });
+    return res.status(200).json(remplissages);
+  } catch (error) {
+    return res.status(500).json({ 
+      message: 'Erreur lors de la récupération des remplissages', 
+      error: error.message 
+    });
+  }
+};
+
+// --- 2. RÉCUPÉRER UN SEUL (GET /api/remplissages/:id) ---
+exports.getOne = async (req, res) => {
+  try {
+    const item = await Remplissage.findByPk(req.params.id, {
+      include: [Bac, DispositifIoT]
+    });
+    if (!item) return res.status(404).json({ message: 'Enregistrement introuvable' });
+    return res.status(200).json(item);
+  } catch (error) {
+    return res.status(500).json({ message: 'Erreur de récupération', error: error.message });
+  }
+};
+
+// --- 3. MISE À JOUR VIA CAPTEUR (POST /api/iot/update) ---
 exports.update = async (req, res) => {
   try {
     const idSerieBody = req.body.id_serie ?? req.body.idSerie;
     const { distance_cm, batterie } = req.body;
 
     if (!idSerieBody || distance_cm === undefined) {
-      return res.status(400).json({
-        message: 'id_serie (ou idSerie) et distance_cm sont obligatoires',
-      });
+      return res.status(400).json({ message: 'id_serie et distance_cm sont obligatoires' });
     }
 
     const idSerieNorm = String(idSerieBody).trim();
+    
     const dispositif = await DispositifIoT.findOne({
       where: Sequelize.where(
-        Sequelize.fn(
-          'LOWER',
-          Sequelize.fn('REPLACE', Sequelize.col('DispositifIoT.idSerie'), '_', '-')
-        ),
+        Sequelize.fn('LOWER', Sequelize.fn('REPLACE', Sequelize.col('idSerie'), '_', '-')),
         idSerieCompareKey(idSerieNorm)
       ),
     });
-    if (!dispositif) {
-      let idSeriesEnBase = [];
-      if (process.env.NODE_ENV !== 'production') {
-        const rows = await DispositifIoT.findAll({
-          attributes: ['idSerie'],
-          limit: 30,
-          raw: true,
-        });
-        idSeriesEnBase = rows
-          .map((r) => r.idSerie ?? r.idserie)
-          .filter((v) => v != null && String(v).trim() !== '');
-      }
-      return res.status(404).json({
-        message: 'Dispositif introuvable : aucun enregistrement avec cet idSerie dans dispositifs_iot',
-        idSerieDemande: idSerieNorm,
-        hint:
-          'Même base que DB_NAME dans .env. Vérifiez tiret vs underscore (IOT-00001 vs IOT_00001 sont acceptés de la même façon). En admin : GET /api/dispositifs-iot pour voir les idSerie auto (création : POST avec idBac + typeCapteur uniquement).',
-        ...(idSeriesEnBase.length ? { idSeriesEnBase } : {}),
-      });
-    }
+
+    if (!dispositif) return res.status(404).json({ message: 'Dispositif IoT introuvable' });
 
     const bac = await Bac.findByPk(dispositif.idBac);
     if (!bac) return res.status(404).json({ message: 'Bac lié au dispositif introuvable' });
 
-    // Hypothèse simple pour la simulation: hauteur max = 100 cm
+    // Calcul du niveau numérique
     const hauteurMaxCm = 100;
     const distance = Number(distance_cm);
     let niveau = ((hauteurMaxCm - distance) / hauteurMaxCm) * 100;
-    if (Number.isNaN(niveau)) niveau = 0;
-    niveau = Math.max(0, Math.min(100, niveau));
+    niveau = Math.max(0, Math.min(100, isNaN(niveau) ? 0 : niveau));
+    
+    // On arrondit à 2 décimales et on convertit en type Nombre
+    const niveauNumerique = Number(niveau.toFixed(2));
 
+    // MISE À JOUR NUMÉRIQUE DU DISPOSITIF
     await dispositif.update({
-      niveauMesure: `${niveau.toFixed(2)}%`,
+      niveauMesure: niveauNumerique, 
       batterie: batterie !== undefined ? Number(batterie) : dispositif.batterie,
     });
 
-    await bac.update({ tauxRemplissage: Number(niveau.toFixed(2)) });
+    // MISE À JOUR NUMÉRIQUE DU BAC
+    await bac.update({ tauxRemplissage: niveauNumerique });
 
-    await Remplissage.create({
+    // CRÉATION NUMÉRIQUE DANS L'HISTORIQUE
+    const nouveauRemplissage = await Remplissage.create({
       idDispositif: dispositif.id,
       idBac: bac.id,
       distanceCm: distance,
       batterie: batterie !== undefined ? Number(batterie) : null,
-      niveauPourcent: Number(niveau.toFixed(2)),
+      niveauPourcent: niveauNumerique,
       dateMesure: new Date(),
     });
 
-    // Alertes : uniquement via les mesures IoT (pas de POST /api/alertes)
-    const seuilAlerte = Number(process.env.ALERTE_SEUIL_PERCENT || 80);
-    const alerteOuverte = await Alerte.findOne({
-      where: { idBac: bac.id, type: 'bac_plein', statut: 'OUVERTE' },
-      order: [['id', 'DESC']],
-    });
-
-    /** Résumé pour le client (Postman / tableau de bord) */
-    let alerteAuto = {
-      source: 'dispositif_iot',
-      idDispositif: dispositif.id,
-      idSerie: dispositif.idSerie,
-      seuilPercent: seuilAlerte,
-      action: 'aucune',
-      idAlerte: null,
-      statut: null,
-    };
-
-    if (niveau >= seuilAlerte) {
-      if (!alerteOuverte) {
-        const created = await Alerte.create({
-          idBac: bac.id,
-          type: 'bac_plein',
-          niveauUrgence: niveau >= 95 ? 'eleve' : 'moyen',
-          statut: 'OUVERTE',
-          message: `Bac ${bac.id} — capteur ${dispositif.idSerie} : ${niveau.toFixed(2)}% (seuil ${seuilAlerte}%)`,
-          date: new Date(),
-        });
-        alerteAuto = {
-          ...alerteAuto,
-          action: 'alerte_creee',
-          idAlerte: created.id,
-          statut: created.statut,
-        };
-      } else {
-        await alerteOuverte.update({
-          niveauUrgence: niveau >= 95 ? 'eleve' : 'moyen',
-          message: `Bac ${bac.id} — capteur ${dispositif.idSerie} : ${niveau.toFixed(2)}% (seuil ${seuilAlerte}%)`,
-          date: new Date(),
-        });
-        alerteAuto = {
-          ...alerteAuto,
-          action: 'alerte_mise_a_jour',
-          idAlerte: alerteOuverte.id,
-          statut: 'OUVERTE',
-        };
-      }
-    } else if (alerteOuverte) {
-      await alerteOuverte.update({
-        statut: 'RESOLUE',
-        message: `Alerte résolue — capteur ${dispositif.idSerie}, bac ${bac.id} à ${niveau.toFixed(2)}%`,
-        date: new Date(),
+    // --- LOGIQUE D'ALERTE ---
+    const seuilAlerte = 80;
+    if (niveauNumerique >= seuilAlerte) {
+      await Alerte.create({
+        idBac: bac.id,
+        type: 'bac_plein',
+        niveauUrgence: niveauNumerique >= 95 ? 'eleve' : 'moyen',
+        statut: 'OUVERTE',
+        message: `Bac ${bac.id} presque plein : ${niveauNumerique}%`,
+        date: new Date()
       });
-      alerteAuto = {
-        ...alerteAuto,
-        action: 'alerte_resolue',
-        idAlerte: alerteOuverte.id,
-        statut: 'RESOLUE',
-      };
     }
 
-    return res.status(200).json({
-      message: `Mise à jour IoT reçue. Niveau de remplissage: ${niveau.toFixed(2)}%`,
-      data: {
-        id_serie: idSerieBody,
-        idDispositif: dispositif.id,
-        idBac: bac.id,
-        distance_cm: distance,
-        batterie: batterie !== undefined ? Number(batterie) : null,
-        niveau: `${niveau.toFixed(2)}%`,
-      },
-      alerte: alerteAuto,
+    return res.status(200).json({ 
+      message: `Mise à jour réussie : ${niveauNumerique}%`, 
+      data: nouveauRemplissage 
     });
   } catch (error) {
-    return res.status(500).json({ message: 'Erreur IoT update', error });
+    return res.status(500).json({ message: 'Erreur lors de la mise à jour IoT', error: error.message });
   }
 };
 
+// --- 4. SUPPRIMER (DELETE /api/remplissages/:id) ---
+exports.delete = async (req, res) => {
+  try {
+    const deleted = await Remplissage.destroy({ where: { id: req.params.id } });
+    if (!deleted) return res.status(404).json({ message: 'Enregistrement non trouvé' });
+    return res.status(200).json({ message: 'Enregistrement supprimé avec succès' });
+  } catch (error) {
+    return res.status(500).json({ message: 'Erreur lors de la suppression', error: error.message });
+  }
+};
+
+// --- 5. MODIFICATION MANUELLE (PUT /api/remplissages/:id) ---
+exports.updateManual = async (req, res) => {
+  try {
+    const { distance_cm, batterie, niveauPourcent } = req.body;
+    const item = await Remplissage.findByPk(req.params.id);
+    
+    if (!item) return res.status(404).json({ message: 'Enregistrement introuvable' });
+
+    await item.update({
+      distanceCm: distance_cm !== undefined ? Number(distance_cm) : item.distanceCm,
+      batterie: batterie !== undefined ? Number(batterie) : item.batterie,
+      niveauPourcent: niveauPourcent !== undefined ? Number(niveauPourcent) : item.niveauPourcent
+    });
+
+    return res.status(200).json({ message: 'Mis à jour avec succès', data: item });
+  } catch (error) {
+    return res.status(500).json({ message: 'Erreur lors de la mise à jour manuelle', error: error.message });
+  }
+};
