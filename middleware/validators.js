@@ -4,6 +4,18 @@ const ROLES = ['admin', 'collecteur', 'citoyen'];
 const DispositifIoTModel = require('../models/DispositifIoT');
 const TYPE_CAPTEURS = DispositifIoTModel.TYPE_CAPTEURS;
 
+// ✅ Listes des ENUMS pour Dakar (doivent correspondre à tes modèles)
+const COMMUNES_DAKAR = [
+  'Dakar Plateau', 'Médina', 'Fann-Point E', 'Ouakam', 'Ngor', 
+  'Yoff', 'Grand Yoff', 'Parcelles Assainies', 'Pikine', 'Guédiawaye',
+  'Rufisque', 'Thiaroye', 'Sangalkam', 'Hann Bel-Air'
+];
+// ✅ Ajout de la liste des départements
+const DEPARTEMENTS_DAKAR = ['Dakar', 'Pikine', 'Guédiawaye', 'Rufisque'];
+
+const STATUTS_BAC = ['actif', 'maintenance', 'hors-service'];
+const STATUTS_ALERTE = ['OUVERTE', 'RESOLUE', 'ARCHIVEE'];
+
 const idParamValidator = [param('id').isInt({ min: 1 }).withMessage('id doit être un entier > 0')];
 
 const idsQueryValidator = [
@@ -45,18 +57,29 @@ const updateUserValidator = [
 ];
 
 const bacCreateValidator = [
-  body('localisation').isString().trim().notEmpty().withMessage('localisation obligatoire'),
+  body('localisation')
+    .isIn(COMMUNES_DAKAR)
+    .withMessage(`La localisation doit être l'une des communes suivantes : ${COMMUNES_DAKAR.join(', ')}`),
   body('capacite').optional().isFloat({ min: 0 }).withMessage('capacite doit être >= 0'),
   body('tauxRemplissage').optional().isFloat({ min: 0, max: 100 }).withMessage('tauxRemplissage 0-100'),
-  body('statut').optional().isString().notEmpty().withMessage('statut invalide'),
+  body('statut')
+    .optional()
+    .isIn(STATUTS_BAC)
+    .withMessage('statut invalide (actif, maintenance, hors-service)'),
 ];
 
 const bacUpdateValidator = [
   ...idParamValidator,
-  body('localisation').optional().isString().notEmpty().withMessage('localisation invalide'),
+  body('localisation')
+    .optional()
+    .isIn(COMMUNES_DAKAR)
+    .withMessage('Commune de Dakar invalide'),
   body('capacite').optional().isFloat({ min: 0 }).withMessage('capacite doit être >= 0'),
   body('tauxRemplissage').optional().isFloat({ min: 0, max: 100 }).withMessage('tauxRemplissage 0-100'),
-  body('statut').optional().isString().notEmpty().withMessage('statut invalide'),
+  body('statut')
+    .optional()
+    .isIn(STATUTS_BAC)
+    .withMessage('statut invalide'),
 ];
 
 const dispositifCreateValidator = [
@@ -78,18 +101,8 @@ const dispositifUpdateValidator = [
 ];
 
 const iotUpdateValidator = [
-  body('id_serie')
-    .optional()
-    .isString()
-    .trim()
-    .notEmpty()
-    .withMessage('id_serie invalide'),
-  body('idSerie')
-    .optional()
-    .isString()
-    .trim()
-    .notEmpty()
-    .withMessage('idSerie invalide'),
+  body('id_serie').optional().isString().trim().notEmpty().withMessage('id_serie invalide'),
+  body('idSerie').optional().isString().trim().notEmpty().withMessage('idSerie invalide'),
   body('distance_cm').isFloat({ min: 0, max: 1000 }).withMessage('distance_cm doit être un nombre >= 0'),
   body('batterie').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('batterie 0-100'),
   body().custom((v) => {
@@ -116,8 +129,11 @@ const alerteUpdateValidator = [
   ...idParamValidator,
   body('idBac').optional({ nullable: true }).isInt({ min: 1 }).withMessage('idBac doit être un entier > 0'),
   body('type').optional().isString().trim().notEmpty().withMessage('type invalide'),
-  body('niveauUrgence').optional().isString().trim().notEmpty().withMessage('niveauUrgence invalide'),
-  body('statut').optional().isString().trim().notEmpty().withMessage('statut invalide'),
+  body('niveauUrgence').optional().isIn(['faible', 'moyen', 'eleve']).withMessage('niveauUrgence invalide'),
+  body('statut')
+    .optional()
+    .isIn(STATUTS_ALERTE)
+    .withMessage('statut invalide (OUVERTE, RESOLUE, ARCHIVEE)'),
   body('date').optional().isISO8601().withMessage('date invalide (ISO8601)'),
 ];
 
@@ -127,7 +143,7 @@ const signalementCreateValidator = [
   body('type').optional().isString().trim().notEmpty().withMessage('type invalide'),
   body('description').isString().trim().notEmpty().withMessage('description obligatoire'),
   body('statut').optional().isString().trim().notEmpty().withMessage('statut invalide'),
-  body('date').optional().isISO8601().withMessage('date invalide (ISO8601)'),
+  body('date').optional().isISO8601().withMessage('date invalire (ISO8601)'),
 ];
 
 const signalementUpdateValidator = [
@@ -145,76 +161,32 @@ const zoneRisqueCreateValidator = [
   body('cause').optional({ nullable: true }).isString().withMessage('cause invalide'),
 ];
 
-/** Texte libre : évite isString() + trim() qui doublonnent les erreurs (ex. "" → Invalid value + obligatoire). */
-function localisationQuartierCreate(value, { req }) {
-  if (value === undefined || value === null) {
-    throw new Error('quartier obligatoire');
-  }
-  const t = String(value).trim();
-  if (!t) {
-    throw new Error('quartier ne peut pas être vide');
-  }
-  req.body.quartier = t;
-  return true;
-}
-
-function localisationQuartierUpdate(value, { req }) {
-  if (value === undefined || value === null || value === '') {
-    return true;
-  }
-  const t = String(value).trim();
-  if (!t) {
-    throw new Error('quartier ne peut pas être une chaîne vide');
-  }
-  req.body.quartier = t;
-  return true;
-}
-
+// ✅ LOCALISATION : Intégration des ENUMS Quartier et Département
 const localisationCreateValidator = [
   body('adresse').isString().trim().notEmpty().withMessage('adresse obligatoire'),
-  body('quartier').custom(localisationQuartierCreate),
+  body('quartier').isIn(COMMUNES_DAKAR).withMessage("Le quartier n'est pas dans la liste autorisée"),
   body('latitude').optional({ nullable: true }).isFloat().withMessage('latitude invalide'),
   body('longitude').optional({ nullable: true }).isFloat().withMessage('longitude invalide'),
-  body('departement').optional({ nullable: true }).isString().withMessage('departement invalide'),
+  body('departement').isIn(DEPARTEMENTS_DAKAR).withMessage("Département invalide (Dakar, Pikine, Guédiawaye, Rufisque)"),
   body('itineraire').optional({ nullable: true }).isString().withMessage('itineraire invalide'),
-  body('itinéraire').optional({ nullable: true }).isString().withMessage('itinéraire invalide'),
-  body('idZoneRisque')
-    .optional({ nullable: true })
-    .isInt({ min: 1 })
-    .withMessage('idZoneRisque doit être un entier > 0'),
-  body('id_zone_risque')
-    .optional({ nullable: true })
-    .isInt({ min: 1 })
-    .withMessage('id_zone_risque doit être un entier > 0'),
+  body('id_zone_risque').optional({ nullable: true }).isInt({ min: 1 }).withMessage('id_zone_risque doit être un entier > 0'),
 ];
 
 const localisationUpdateValidator = [
   ...idParamValidator,
   body('adresse').optional().isString().trim().notEmpty().withMessage('adresse invalide'),
-  body('quartier').optional({ values: 'falsy' }).custom(localisationQuartierUpdate),
+  body('quartier').optional().isIn(COMMUNES_DAKAR).withMessage("Quartier non reconnu"),
   body('latitude').optional({ nullable: true }).isFloat().withMessage('latitude invalide'),
   body('longitude').optional({ nullable: true }).isFloat().withMessage('longitude invalide'),
-  body('departement').optional({ nullable: true }).isString().withMessage('departement invalide'),
-  body('itineraire').optional({ nullable: true }).isString().withMessage('itineraire invalide'),
-  body('itinéraire').optional({ nullable: true }).isString().withMessage('itinéraire invalide'),
-  body('idZoneRisque')
-    .optional({ nullable: true })
-    .isInt({ min: 1 })
-    .withMessage('idZoneRisque doit être un entier > 0'),
-  body('id_zone_risque')
-    .optional({ nullable: true })
-    .isInt({ min: 1 })
-    .withMessage('id_zone_risque doit être un entier > 0'),
+  body('departement').optional().isIn(DEPARTEMENTS_DAKAR).withMessage("Département invalide"),
+  body('id_zone_risque').optional({ nullable: true }).isInt({ min: 1 }).withMessage('id_zone_risque doit être un entier > 0'),
 ];
 
 const camionCreateValidator = [
   body('immatriculation').isString().trim().notEmpty().withMessage('immatriculation obligatoire'),
   body('etat').optional().isString().trim().notEmpty().withMessage('etat invalide'),
   body('capacite').optional().isFloat({ min: 0 }).withMessage('capacite doit être >= 0'),
-  body('idItineraire')
-    .optional({ nullable: true })
-    .isInt({ min: 1 })
-    .withMessage('idItineraire doit être un entier > 0'),
+  body('idItineraire').optional({ nullable: true }).isInt({ min: 1 }).withMessage('idItineraire doit être un entier > 0'),
 ];
 
 const camionUpdateValidator = [...idParamValidator, ...camionCreateValidator];

@@ -11,7 +11,7 @@ const DispositifIoT = sequelize.define(
     /** Numéro de série auto-attribué à la création (IOT-00001, …), non modifiable via API. */
     idSerie: { type: DataTypes.STRING, allowNull: true, unique: true },
     typeCapteur: { type: DataTypes.ENUM(...TYPE_CAPTEURS), allowNull: false },
-    niveauMesure: { type: DataTypes.STRING, allowNull: true },
+    niveauMesure: {type: DataTypes.FLOAT, allowNull: true },
     batterie: { type: DataTypes.FLOAT, allowNull: true },
     etat: { type: DataTypes.STRING, allowNull: false, defaultValue: 'actif' },
     idBac: { type: DataTypes.INTEGER, allowNull: false },
